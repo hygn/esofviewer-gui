@@ -2,7 +2,7 @@ from PyQt5.QtCore import *
 from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
 import time as time_
-import threading
+import multiprocessing
 import esoflib
 import eula
 import sys
@@ -33,7 +33,7 @@ class Window(QWidget):
         setting = setting.read().split(',')
         QWidget.__init__(self)
         layout = QGridLayout()
-        self.setWindowTitle("EBS온라인클래스 뷰어 v0.4b")
+        self.setWindowTitle("EBS온라인클래스 뷰어 v0.5b")
         def btn(label,value,ontoggle,ypos,xpos,objname,checkable,checked):
             button = self.button_s = QPushButton(label, objectName=objname)
             button.value = value
@@ -46,13 +46,15 @@ class Window(QWidget):
             label.value = value
             label.setMaximumWidth(700)
             layout.addWidget(label,ypos,xpos)
-        def textbox(value,ypos,xpos,objname):
+        def textbox(value,ypos,xpos,objname,setenable=True):
             textbox= self.textbox_s = QLineEdit(self,objectName=objname)
             textbox.value = value
+            textbox.setEnabled(setenable)
             textbox.setMinimumWidth(500)
             layout.addWidget(textbox,ypos,xpos)
-        def combobox(items,objname,ypos,xpos):
+        def combobox(items,objname,ypos,xpos,onevt=self.passfunc):
             combo = self.combo_s = QComboBox(self,objectName=objname)
+            combo.currentIndexChanged.connect(onevt)
             combo.addItems(items)
             layout.addWidget(combo,ypos,xpos)
         def plaintext(value,ypos,xpos,objname):
@@ -95,8 +97,39 @@ class Window(QWidget):
                 labeltag('0:00',i*2+1,5,'lecttime'+str(i),'0:00')
                 labeltag('강의 이름: -----',i*2+2,4,'lectname'+str(i),'')
                 labeltag('수강 미완료',i*2+2,5,'lectfin'+str(i),'')
+            labeltag('JSESSIONID',19,3,'jsessionid','')
+            labeltag('khanuser',20,3,'khanuser','')
+            labeltag('로그인 방법',19,5,'loginmethodlabel','')
+            combobox(['브라우저','쿠키입력'],'loginmeth',20,5,self.combochange)
+            textbox('',19,4,'jsessionid',False)
+            textbox('',20,4,'khanuser',False)
             btn('시작','시작',self.start,21,4,'start',True,False)
             checkbox('자동시간표',21,3,'autotime')
+            btn('종료','종료',self.quit,21,5,'quit',False,False)
+    def passfunc(self):
+        pass
+    def combochange(self):
+        cbindex = self.findChild(QComboBox, 'loginmeth').currentText()
+        try:
+            if cbindex == '브라우저':
+                self.findChild(QLineEdit, 'jsessionid').setEnabled(False)
+                self.findChild(QLineEdit, 'khanuser').setEnabled(False)
+            else:
+                self.findChild(QLineEdit, 'jsessionid').setEnabled(True)
+                self.findChild(QLineEdit, 'khanuser').setEnabled(True)
+        except:
+            pass
+    def closeEvent(self, event):
+        try:
+            for i in thrs:
+                i.terminate()
+        except:
+            pass
+        event.accept()
+    def quit(self):
+        for i in thrs:
+            i.terminate()
+        self.close()
     def agree(self):
         gpla = self.findChild(QCheckBox, 'gplagree').isChecked()
         nga = self.findChild(QCheckBox, 'noguranteeagree').isChecked()
@@ -108,17 +141,23 @@ class Window(QWidget):
     def start(self):
         self.findChild(QPushButton, 'start').setText('Fetching Lecture Data')
         self.findChild(QPushButton, 'start').setEnabled(False)
+        self.findChild(QPushButton, 'quit').setEnabled(True)
         lectdata = []
         for i in range(8):
             lecturl = self.findChild(QLineEdit, 'lecturl'+str(i)).text()
             if lecturl == '':
                 break
             try:
-                cookies = cookie.query(lecturl.split('.')[0].split('//')[1])
+                cbindex = self.findChild(QComboBox, 'loginmeth').currentText()
+                if cbindex == '브라우저':
+                    cookies = cookie.query(lecturl.split('.')[0].split('//')[1])
+                else:
+                    cookies = 'JSESSIONID='+self.findChild(QLineEdit, 'jsessionid').text() +', khanuser='+ self.findChild(QLineEdit, 'khanuser').text()
             except Exception as e:
                 errormsg('오류 발생!', 'urlerr', '올바른 강의 URL을 입력하였는지 확인해주세요. \n 만약 확인 후에 같은 에러가 발견될 경우 아래의 내용을 이슈트래커에 올려주세요. \n ----traceback---- \n'+traceback.format_exc())
                 self.findChild(QPushButton, 'start').setText('시작')
                 self.findChild(QPushButton, 'start').setEnabled(True)
+                self.findChild(QPushButton, 'quit').setEnabled(False)
                 lectdata = []
                 break
             lecthr = self.findChild(QComboBox, 'lecthr'+str(i)).currentText()
@@ -130,6 +169,7 @@ class Window(QWidget):
         if len(lectdata) == 0:
             self.findChild(QPushButton, 'start').setText('시작')
             self.findChild(QPushButton, 'start').setEnabled(True)
+            self.findChild(QPushButton, 'quit').setEnabled(False)
         for i in lectdata:
             print(i)
             try:
@@ -140,6 +180,7 @@ class Window(QWidget):
                 fetchresult = []
                 self.findChild(QPushButton, 'start').setText('시작')
                 self.findChild(QPushButton, 'start').setEnabled(True)
+                self.findChild(QPushButton, 'quit').setEnabled(False)
                 break
         objid = 0
         plusdelta = datetime.datetime.now()
@@ -187,6 +228,7 @@ class Window(QWidget):
                 except:
                     errormsg('오류 발생!', 'lecterr', '강의수강중 에러가 발생했습니다. \n 아래의 내용을 이슈트래커에 올려주세요.\n ----traceback---- \n'+traceback.format_exc())
                 self.findChild(QLabel, 'lectfin'+str(thrid)).setText('수강완료')
+                sys.exit()
             if 'now' in time:
                 esofwrap(url,cookies,playbackspeed,downloadbool,thrid)
                 return
@@ -198,6 +240,7 @@ class Window(QWidget):
                     else:
                         print('check')
                         time_.sleep(60)
+        global thrs
         thrs = []
         thrid = 0
         for i in lectdata:
@@ -205,12 +248,15 @@ class Window(QWidget):
                 if i[0].split(':')[0] == 'now':
                     self.findChild(QPushButton, 'start').setText('시작')
                     self.findChild(QPushButton, 'start').setEnabled(True)
+                    self.findChild(QPushButton, 'quit').setEnabled(False)
                     lectdata = []
                     thrs = []
                     break
             print(i)
             try:
-                thrs.append(threading.Thread(target=scheduled, args=(i[0], i[2], cookies, i[1], i[3], thrid)))
+                proc = multiprocessing.Process(target=scheduled, args=(i[0], i[2], cookies, i[1], i[3], thrid))
+                proc.start()
+                thrs.append(proc)
             except:
                 errormsg('오류 발생!', 'threrr', 'thread 생성 에러가 발생했습니다. \n 아래의 내용을 이슈트래커에 올려주세요.\n ----traceback---- \n'+traceback.format_exc())
                 lectdata = []
@@ -218,10 +264,9 @@ class Window(QWidget):
                 thrs = []
                 self.findChild(QPushButton, 'start').setText('시작')
                 self.findChild(QPushButton, 'start').setEnabled(True)
+                self.findChild(QPushButton, 'quit').setEnabled(False)
                 break
             thrid = thrid+1
-        for i in thrs:
-            i.start() 
         if lectdata != []:
             self.findChild(QPushButton, 'start').setText('Finished!')
 app = QApplication(sys.argv)

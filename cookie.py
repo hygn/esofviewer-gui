@@ -10,3 +10,4 @@ def query(hoc):
         if hoc+'.ebssw.kr' in i:
             cookies = cookies + i.replace('Cookie ','').split(' for')[0] + ', '
     return cookies
+
