@@ -1,4 +1,4 @@
-def work(url=None,jsessionid=None,khanuser=None,playbackspeed="1",download=False,checkonly=False):
+def work(url=None,cookies=None,playbackspeed="1",download=False,checkonly=False):
     import pycurl
     import time
     import wget
@@ -47,7 +47,7 @@ def work(url=None,jsessionid=None,khanuser=None,playbackspeed="1",download=False
     hoc = url.split("//")[1].split(".")[0]
     get = url.strip("https://"+hoc+".ebssw.kr/mypage/userlrn/userLrnView.do?")
     params = get.split("&")
-    cookie = 'JSESSIONID='+str(jsessionid)+", KHANUSER="+str(khanuser)
+    cookie = cookies
     dat = curl(url, "", cookie, False , OS, browser)
     print(url)
     cnts = dat.split('if( headerCntntsTyCode === "')[1].split('"')[0]

@@ -9,6 +9,13 @@ import sys
 import datetime
 import os
 import default_theme
+import cookie
+import traceback
+def errormsg(windowname,objname,content):
+    messagebox = QMessageBox(QMessageBox.Critical, windowname, content, objectName=objname)
+    messagebox.addButton(QPushButton('확인'), QMessageBox.YesRole)
+    messagebox.setStyleSheet('max-height: 2000px;')
+    messagebox.exec_()
 class Window(QWidget):
     def __init__(self):
         self.threadpool = QThreadPool()
@@ -26,7 +33,7 @@ class Window(QWidget):
         setting = setting.read().split(',')
         QWidget.__init__(self)
         layout = QGridLayout()
-        self.setWindowTitle("EBS온라인클래스 뷰어 v0.3b")
+        self.setWindowTitle("EBS온라인클래스 뷰어 v0.4b")
         def btn(label,value,ontoggle,ypos,xpos,objname,checkable,checked):
             button = self.button_s = QPushButton(label, objectName=objname)
             button.value = value
@@ -88,10 +95,6 @@ class Window(QWidget):
                 labeltag('0:00',i*2+1,5,'lecttime'+str(i),'0:00')
                 labeltag('강의 이름: -----',i*2+2,4,'lectname'+str(i),'')
                 labeltag('수강 미완료',i*2+2,5,'lectfin'+str(i),'')
-            labeltag('JSESSIONID',19,3,'jsessionid','')
-            labeltag('khanuser',20,3,'khanuser','')
-            textbox('',19,4,'jsessionid')
-            textbox('',20,4,'khanuser')
             btn('시작','시작',self.start,21,4,'start',True,False)
             checkbox('자동시간표',21,3,'autotime')
     def agree(self):
@@ -105,13 +108,18 @@ class Window(QWidget):
     def start(self):
         self.findChild(QPushButton, 'start').setText('Fetching Lecture Data')
         self.findChild(QPushButton, 'start').setEnabled(False)
-        jsessionid = self.findChild(QLineEdit, 'jsessionid').text()
-        khanuser = self.findChild(QLineEdit, 'khanuser').text()
-        print(jsessionid)
         lectdata = []
         for i in range(8):
             lecturl = self.findChild(QLineEdit, 'lecturl'+str(i)).text()
             if lecturl == '':
+                break
+            try:
+                cookies = cookie.query(lecturl.split('.')[0].split('//')[1])
+            except Exception as e:
+                errormsg('오류 발생!', 'urlerr', '올바른 강의 URL을 입력하였는지 확인해주세요. \n 만약 확인 후에 같은 에러가 발견될 경우 아래의 내용을 이슈트래커에 올려주세요. \n ----traceback---- \n'+traceback.format_exc())
+                self.findChild(QPushButton, 'start').setText('시작')
+                self.findChild(QPushButton, 'start').setEnabled(True)
+                lectdata = []
                 break
             lecthr = self.findChild(QComboBox, 'lecthr'+str(i)).currentText()
             lectmin = self.findChild(QComboBox, 'lectmin'+str(i)).currentText()
@@ -125,12 +133,9 @@ class Window(QWidget):
         for i in lectdata:
             print(i)
             try:
-                fetchresult.append(esoflib.work(i[2],jsessionid,khanuser,i[1],False,True))
+                fetchresult.append(esoflib.work(i[2],cookies,i[1],False,True))
             except Exception as e:
-                messagebox = QMessageBox(QMessageBox.Warning, "오류 발생!", "URL,JSESSIONID,khanuser필드를 확인해주세요 \n\n\n\n\n\n 에러코드: {0}".format(e), 
-                objectName="errorfetch")
-                messagebox.addButton(QPushButton('확인'), QMessageBox.YesRole)
-                messagebox.exec_()
+                errormsg('오류 발생!', 'loginerr', '올바른 강의 URL을 입력하였는지 확인하시고, \n 웹브라우져상에서 로그인이 되어있는지 확인해주세요. \n 만약 확인 후에 같은 에러가 발견될 경우 아래의 내용을 이슈트래커에 올려주세요.\n ----traceback---- \n'+traceback.format_exc())
                 lectdata = []
                 fetchresult = []
                 self.findChild(QPushButton, 'start').setText('시작')
@@ -169,23 +174,26 @@ class Window(QWidget):
                     lectdata.append([lecthr + ':' +lectmin,lectspeed, lecturl, lectdl])
             previ = i
             objid = objid + 1
-        def scheduled(time,url,jsessionid,khanuser,playbackspeed,download,thrid):
+        def scheduled(time,url,cookies,playbackspeed,download,thrid):
             if download == 'O':
                 downloadbool = True
             else:
                 downloadbool = False
-            def esofwrap(url,jsessionid,khanuser,playbackspeed,download,thrid):
+            def esofwrap(url,cookies,playbackspeed,download,thrid):
                 self.findChild(QLabel, 'lectfin'+str(thrid)).setText('수강중')
                 print(thrid)
-                esoflib.work(url,jsessionid,khanuser,playbackspeed,download)
+                try:
+                    esoflib.work(url,cookies,playbackspeed,download)
+                except:
+                    errormsg('오류 발생!', 'lecterr', '강의수강중 에러가 발생했습니다. \n 아래의 내용을 이슈트래커에 올려주세요.\n ----traceback---- \n'+traceback.format_exc())
                 self.findChild(QLabel, 'lectfin'+str(thrid)).setText('수강완료')
             if 'now' in time:
-                esofwrap(url,jsessionid,khanuser,playbackspeed,downloadbool,thrid)
+                esofwrap(url,cookies,playbackspeed,downloadbool,thrid)
                 return
             else:
                 while True:
                     if time == str(datetime.datetime.now().strftime('%H:%M')):
-                        esofwrap(url,jsessionid,khanuser,playbackspeed,downloadbool,thrid)
+                        esofwrap(url,cookies,playbackspeed,downloadbool,thrid)
                         return
                     else:
                         print('check')
@@ -201,7 +209,16 @@ class Window(QWidget):
                     thrs = []
                     break
             print(i)
-            thrs.append(threading.Thread(target=scheduled, args=(i[0], i[2], jsessionid, khanuser, i[1], i[3], thrid)))
+            try:
+                thrs.append(threading.Thread(target=scheduled, args=(i[0], i[2], cookies, i[1], i[3], thrid)))
+            except:
+                errormsg('오류 발생!', 'threrr', 'thread 생성 에러가 발생했습니다. \n 아래의 내용을 이슈트래커에 올려주세요.\n ----traceback---- \n'+traceback.format_exc())
+                lectdata = []
+                fetchresult = []
+                thrs = []
+                self.findChild(QPushButton, 'start').setText('시작')
+                self.findChild(QPushButton, 'start').setEnabled(True)
+                break
             thrid = thrid+1
         for i in thrs:
             i.start() 
