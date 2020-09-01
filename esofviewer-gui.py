@@ -11,6 +11,7 @@ import os
 import default_theme
 import cookie
 import traceback
+from pynotifier import Notification
 def errormsg(windowname,objname,content):
     messagebox = QMessageBox(QMessageBox.Critical, windowname, content, objectName=objname)
     messagebox.addButton(QPushButton('확인'), QMessageBox.YesRole)
@@ -33,7 +34,7 @@ class Window(QWidget):
         setting = setting.read().split(',')
         QWidget.__init__(self)
         layout = QGridLayout()
-        self.setWindowTitle("EBS온라인클래스 뷰어 v0.5b")
+        self.setWindowTitle("EBS온라인클래스 뷰어 v0.6b")
         def btn(label,value,ontoggle,ypos,xpos,objname,checkable,checked):
             button = self.button_s = QPushButton(label, objectName=objname)
             button.value = value
@@ -96,7 +97,6 @@ class Window(QWidget):
                 textbox('',i*2+1,4,'lecturl'+str(i))
                 labeltag('0:00',i*2+1,5,'lecttime'+str(i),'0:00')
                 labeltag('강의 이름: -----',i*2+2,4,'lectname'+str(i),'')
-                labeltag('수강 미완료',i*2+2,5,'lectfin'+str(i),'')
             labeltag('JSESSIONID',19,3,'jsessionid','')
             labeltag('khanuser',20,3,'khanuser','')
             labeltag('로그인 방법',19,5,'loginmethodlabel','')
@@ -164,7 +164,7 @@ class Window(QWidget):
             lectmin = self.findChild(QComboBox, 'lectmin'+str(i)).currentText()
             lectspeed = self.findChild(QComboBox, 'lectspeed'+str(i)).currentText()
             lectdl = self.findChild(QComboBox, 'lectdl'+str(i)).currentText()
-            lectdata.append([lecthr + ':' +lectmin,lectspeed, lecturl, lectdl])
+            lectdata.append([lecthr + ':' +lectmin,lectspeed, lecturl.replace(' ',''), lectdl])
         fetchresult = []
         if len(lectdata) == 0:
             self.findChild(QPushButton, 'start').setText('시작')
@@ -215,34 +215,35 @@ class Window(QWidget):
                     lectdata.append([lecthr + ':' +lectmin,lectspeed, lecturl, lectdl])
             previ = i
             objid = objid + 1
-        def scheduled(time,url,cookies,playbackspeed,download,thrid):
+        def scheduled(time,url,cookies,playbackspeed,download,thrid, self):
             if download == 'O':
                 downloadbool = True
             else:
                 downloadbool = False
-            def esofwrap(url,cookies,playbackspeed,download,thrid):
-                self.findChild(QLabel, 'lectfin'+str(thrid)).setText('수강중')
+            def esofwrap(url,cookies,playbackspeed,download,thrid, self):
                 print(thrid)
                 try:
                     esoflib.work(url,cookies,playbackspeed,download)
                 except:
                     errormsg('오류 발생!', 'lecterr', '강의수강중 에러가 발생했습니다. \n 아래의 내용을 이슈트래커에 올려주세요.\n ----traceback---- \n'+traceback.format_exc())
-                self.findChild(QLabel, 'lectfin'+str(thrid)).setText('수강완료')
                 sys.exit()
             if 'now' in time:
-                esofwrap(url,cookies,playbackspeed,downloadbool,thrid)
-                return
+                esofwrap(url,cookies,playbackspeed,downloadbool,thrid, self)
             else:
                 while True:
                     if time == str(datetime.datetime.now().strftime('%H:%M')):
-                        esofwrap(url,cookies,playbackspeed,downloadbool,thrid)
-                        return
+                        esofwrap(url,cookies,playbackspeed,downloadbool,thrid, self)
                     else:
                         print('check')
                         time_.sleep(60)
         global thrs
         thrs = []
         thrid = 0
+        Notification(
+            title='시작',
+            description='이 프로그램을 모든 강의가 끝날때까지 닫지 마십시오.',
+            duration=10,
+            ).send()
         for i in lectdata:
             if thrid != 0:
                 if i[0].split(':')[0] == 'now':
@@ -254,7 +255,7 @@ class Window(QWidget):
                     break
             print(i)
             try:
-                proc = multiprocessing.Process(target=scheduled, args=(i[0], i[2], cookies, i[1], i[3], thrid))
+                proc = multiprocessing.Process(target=scheduled, args=(i[0], i[2], cookies, i[1], i[3], thrid, self))
                 proc.start()
                 thrs.append(proc)
             except:

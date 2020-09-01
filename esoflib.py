@@ -8,6 +8,7 @@ def work(url=None,cookies=None,playbackspeed="1",download=False,checkonly=False)
     import browser_cookie3
     import platform
     import youtube_dl
+    from pynotifier import Notification
     buffer = BytesIO()
     def curl(url, postfields, cookie, posten, os, browser):
         curl = pycurl.Curl()
@@ -72,6 +73,12 @@ def work(url=None,cookies=None,playbackspeed="1",download=False,checkonly=False)
     revtime = dat.split('var revivTime = Number( "')[1].split('"')[0]
     name = dat.split('<strong class="content_tit">')[1].split("<")[0]
     print(name)
+    if checkonly != True:
+        Notification(
+            title='수강 시작',
+            description=name+'의 수강이 시작되었습니다',
+            duration=3,
+            ).send()
     # getjs
     get_data = {
         '_': str(time.time()).split(".")[0]}
@@ -86,13 +93,26 @@ def work(url=None,cookies=None,playbackspeed="1",download=False,checkonly=False)
     postfields = urlencode(post_data)
     curl("https://"+hoc+".ebssw.kr/esof/cmmn/cntntsUseInsert.do",
          postfields, cookie, True, OS, browser)
+    if download:
+        Notification(
+            title='다운로드 시작',
+            description=name+'의 강의 다운로드가 시작되었습니다',
+            duration=3,
+            ).send()
     if vidtype == 'ebs' and download:
         wget.download(video.replace("\\", ""), name+'.mp4')
         print("video downloaded")
     if vidtype == 'yt' and download:
         ydl_opts = {}
+        print('start ydl')
         with youtube_dl.YoutubeDL(ydl_opts) as ydl:
             ydl.download([video])
+    if download:
+        Notification(
+            title='다운로드 완료',
+            description=name+'의 강의 다운로드가 완료되었습니다',
+            duration=3,
+            ).send()
     i = 0
     if int(revtime) < 120:
         lrntime = int(int(revtime)/2)
@@ -103,6 +123,8 @@ def work(url=None,cookies=None,playbackspeed="1",download=False,checkonly=False)
     if checkonly == True:
         time_min = str(int((int(revtime) - int(revtime) % 60)/60)) 
         time_sec = str(int(revtime) % 60)
+        if len(time_sec) == 1:
+            time_sec='0'+time_sec
         return [name,time_min,time_sec,revtime]
     while checkonly == False:
         if i == 0:
@@ -123,6 +145,11 @@ def work(url=None,cookies=None,playbackspeed="1",download=False,checkonly=False)
         if playbackspeed != "inf":
             curl("https://"+hoc+".ebssw.kr/mypage/userlrn/lctreLrnSave.do",
                  postfields, cookie, True, OS, browser)
+            Notification(
+                title='강의 진행률 저장',
+                description=name+'의 강의 진행률을 저장했습니다.',
+                duration=3, 
+                ).send()
             print('checkpacket')
         if i != rep:
             if playbackspeed == "1":
@@ -150,6 +177,11 @@ def work(url=None,cookies=None,playbackspeed="1",download=False,checkonly=False)
             postfields = urlencode(post_data)
             curl("https://"+hoc+".ebssw.kr/mypage/userlrn/lctreLrnSave.do",
                  postfields, cookie, True, OS, browser)
+            Notification(
+            title='수강 완료',
+            description=name+'의 수강이 완료되었습니다',
+            duration=10, 
+            ).send()
             print('complete!')
             return 'complete!'
             break
